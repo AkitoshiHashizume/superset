@@ -16,8 +16,10 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import {
+  Column,
+  TableState,
   useFilters,
   usePagination,
   useRowSelect,
@@ -45,10 +47,17 @@ import {
   ViewModeType,
 } from './types';
 
+type QueryFilterState = {
+  [id: string]: FilterValue['value'];
+};
+
 // Define custom RisonParam for proper encoding/decoding; note that
 // %, &, +, and # must be encoded to avoid breaking the url
-const RisonParam: QueryParamConfig<string, any> = {
-  encode: (data?: any | null) => {
+const RisonParam: QueryParamConfig<
+  QueryFilterState,
+  QueryFilterState | undefined
+> = {
+  encode: (data?: QueryFilterState | null) => {
     if (data === undefined || data === null) return undefined;
 
     const cleanData = JSON.parse(
@@ -67,7 +76,7 @@ const RisonParam: QueryParamConfig<string, any> = {
   decode: (dataStr?: string | string[]) =>
     dataStr === undefined || Array.isArray(dataStr)
       ? undefined
-      : rison.decode(dataStr),
+      : (rison.decode(dataStr) as QueryFilterState),
 };
 
 export const SELECT_WIDTH = 176;
@@ -79,13 +88,13 @@ export class ListViewError extends Error {
 }
 
 // removes element from a list, returns new list
-export function removeFromList(list: any[], index: number): any[] {
+export function removeFromList<T>(list: T[], index: number): T[] {
   return list.filter((_, i) => index !== i);
 }
 
 // apply update to elements of object list, returns new list
-function updateInList(list: any[], index: number, update: any): any[] {
-  const element = list.find((_, i) => index === i);
+function updateInList<T>(list: T[], index: number, update: Partial<T>): T[] {
+  const element = list[index];
 
   return [
     ...list.slice(0, index),
@@ -93,10 +102,6 @@ function updateInList(list: any[], index: number, update: any): any[] {
     ...list.slice(index + 1),
   ];
 }
-
-type QueryFilterState = {
-  [id: string]: FilterValue['value'];
-};
 
 function mergeCreateFilterValues(list: Filter[], updateObj: QueryFilterState) {
   return list.map(({ id, urlDisplay, operator }) => {
@@ -143,7 +148,7 @@ export function convertFilters(fts: InternalFilter[]): FilterValue[] {
 
 // convertFilters but to handle new decoded rison format
 export function convertFiltersRison(
-  filterObj: any,
+  filterObj: QueryFilterState,
   list: Filter[],
 ): FilterValue[] {
   const filters: FilterValue[] = [];
@@ -174,7 +179,10 @@ export function convertFiltersRison(
   return filters;
 }
 
-export function extractInputValue(inputType: Filter['input'], event: any) {
+export function extractInputValue(
+  inputType: Filter['input'],
+  event: ChangeEvent<HTMLInputElement>,
+) {
   if (!inputType || inputType === 'text') {
     return event.currentTarget.value;
   }
@@ -186,9 +194,9 @@ export function extractInputValue(inputType: Filter['input'], event: any) {
 }
 
 interface UseListViewConfig {
-  fetchData: (conf: FetchDataConfig) => any;
-  columns: any[];
-  data: any[];
+  fetchData: (conf: FetchDataConfig) => void;
+  columns: Column<object>[];
+  data: object[];
   count: number;
   initialPageSize: number;
   initialSort?: SortColumn[];
@@ -224,7 +232,7 @@ export function useListViewState({
     [initialSort, query.sortColumn, query.sortOrder],
   );
 
-  const initialState = {
+  const initialState: Partial<TableState<object>> = {
     filters: query.filters
       ? convertFiltersRison(query.filters, initialFilters)
       : [],
@@ -265,20 +273,20 @@ export function useListViewState({
       data,
       disableFilters: true,
       disableSortRemove: true,
-      initialState: initialState as any,
+      initialState,
       manualFilters: true,
       manualPagination: true,
       manualSortBy: true,
       autoResetFilters: false,
       pageCount: Math.ceil(count / initialPageSize),
-      ...({ count } as any),
+      count,
     },
     useFilters,
     useSortBy,
     usePagination,
     useRowState,
     useRowSelect,
-  ) as any;
+  );
 
   const [internalFilters, setInternalFilters] = useState<InternalFilter[]>(
     query.filters && initialFilters.length
@@ -311,7 +319,13 @@ export function useListViewState({
       }
     });
 
-    const queryParams: any = {
+    const queryParams: {
+      filters?: QueryFilterState;
+      pageIndex: number;
+      sortColumn?: string;
+      sortOrder?: string;
+      viewMode?: ViewModeType;
+    } = {
       filters: Object.keys(filterObj).length ? filterObj : undefined,
       pageIndex,
     };
@@ -341,7 +355,7 @@ export function useListViewState({
     }
   }, [query]);
 
-  const applyFilterValue = (index: number, value: any) => {
+  const applyFilterValue = (index: number, value: FilterValue['value']) => {
     setInternalFilters(currentInternalFilters => {
       // skip redundant updates
       if (currentInternalFilters[index].value === value) {
