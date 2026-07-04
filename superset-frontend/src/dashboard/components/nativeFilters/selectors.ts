@@ -26,6 +26,7 @@ import {
   getColumnLabel,
   NativeFilterType,
   NO_TIME_RANGE,
+  QueryData,
   QueryFormColumn,
 } from '@superset-ui/core';
 import { TIME_FILTER_MAP } from 'src/explore/constants';
@@ -50,10 +51,24 @@ type Datasource = {
   verbose_map?: Record<string, string>;
 };
 
+type FilterScope = {
+  scope: string[];
+  immune?: number[];
+};
+
+// The subset of the redux chart state inspected to derive filter indicators.
+type ChartWithQueryResponse = {
+  queriesResponse?: QueryData[] | null;
+};
+
+type QueryFilterColumn = {
+  column: string;
+};
+
 type Filter = {
   chartId: number;
   columns: { [key: string]: string | string[] };
-  scopes: { [key: string]: any };
+  scopes: { [key: string]: FilterScope };
   labels: { [key: string]: string };
   isDateFilter: boolean;
   directPathToFilter: string[];
@@ -78,7 +93,7 @@ const selectIndicatorValue = (
   columnKey: string,
   filter: Filter,
   datasource: Datasource,
-): any => {
+): string[] => {
   const values = filter.columns[columnKey];
   const arrValues = Array.isArray(values) ? values : [values];
 
@@ -142,9 +157,9 @@ const selectIndicatorsForChartFromFilter = (
 };
 
 const getQueryFilterMetadata = (
-  chart: any,
+  chart: ChartWithQueryResponse | undefined,
   metadataKey: 'applied_filters' | 'rejected_filters',
-) =>
+): QueryFilterColumn[] =>
   ensureIsArray(chart?.queriesResponse).flatMap(
     queryResponse =>
       (metadataKey === 'applied_filters'
@@ -152,10 +167,12 @@ const getQueryFilterMetadata = (
         : queryResponse?.rejected_filters) || [],
   );
 
-const getAppliedColumns = (chart: any): Set<string> =>
+const getAppliedColumns = (
+  chart: ChartWithQueryResponse | undefined,
+): Set<string> =>
   new Set(
     getQueryFilterMetadata(chart, 'applied_filters').map(
-      (filter: any) => filter.column,
+      filter => filter.column,
     ),
   );
 
@@ -166,7 +183,7 @@ const getAppliedColumns = (chart: any): Set<string> =>
  * applied_filter_columns populated.
  */
 export const getAppliedColumnsWithFallback = (
-  chart: any,
+  chart: ChartWithQueryResponse | undefined,
   nativeFilters?: Filters,
   dataMask?: DataMaskStateWithId,
   chartId?: number,
@@ -174,7 +191,7 @@ export const getAppliedColumnsWithFallback = (
   // First try to get from query response (preferred source of truth)
   const queryAppliedFilters = getQueryFilterMetadata(chart, 'applied_filters');
   if (queryAppliedFilters.length > 0) {
-    return new Set(queryAppliedFilters.map((filter: any) => filter.column));
+    return new Set(queryAppliedFilters.map(filter => filter.column));
   }
 
   // Fallback: derive from native filters and dataMask when query response is empty
@@ -199,9 +216,11 @@ export const getAppliedColumnsWithFallback = (
   return new Set<string>();
 };
 
-const getRejectedColumns = (chart: any): Set<string> =>
+const getRejectedColumns = (
+  chart: ChartWithQueryResponse | undefined,
+): Set<string> =>
   new Set(
-    getQueryFilterMetadata(chart, 'rejected_filters').map((filter: any) =>
+    getQueryFilterMetadata(chart, 'rejected_filters').map(filter =>
       getColumnLabel(filter.column),
     ),
   );
@@ -209,7 +228,7 @@ const getRejectedColumns = (chart: any): Set<string> =>
 export type Indicator = {
   column?: QueryFormColumn;
   name: string;
-  value?: any;
+  value?: string | string[] | null;
   status?: IndicatorStatus;
   path?: string[];
   customColumnLabel?: string;
@@ -262,7 +281,7 @@ export const selectIndicatorsForChart = (
   chartId: number,
   filters: { [key: number]: Filter },
   datasources: { [key: string]: Datasource },
-  chart: any,
+  chart: ChartWithQueryResponse | undefined,
 ): Indicator[] => {
   // for now we only need to know which columns are compatible/incompatible,
   // so grab the columns from the applied/rejected filters
@@ -318,7 +337,7 @@ const getStatus = ({
   rejectedColumns,
   appliedColumns,
 }: {
-  label: string | null;
+  label: string | string[] | null | undefined;
   column?: string;
   type?: DataMaskType;
   rejectedColumns?: Set<string>;
@@ -403,7 +422,7 @@ export const selectNativeIndicatorsForChart = (
   nativeFilters: Filters,
   dataMask: DataMaskStateWithId,
   chartId: number,
-  chart: any,
+  chart: ChartWithQueryResponse | undefined,
   chartLayoutItems: LayoutItem[],
   chartConfiguration: ChartConfiguration = defaultChartConfig,
 ): Indicator[] => {
