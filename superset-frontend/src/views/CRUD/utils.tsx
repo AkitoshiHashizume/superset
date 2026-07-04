@@ -20,6 +20,7 @@
 import { logging } from '@apache-superset/core/utils';
 import { t } from '@apache-superset/core/translation';
 import {
+  JsonObject,
   SupersetClient,
   SupersetClientResponse,
   getClientErrorObject,
@@ -53,12 +54,12 @@ import {
 // Modifies the rison encoding slightly to match the backend's rison encoding/decoding. Applies globally.
 // Code pulled from rison.js (https://github.com/Nanonid/rison), rison is licensed under the MIT license.
 (() => {
-  const risonRef: {
+  const risonRef = rison as unknown as {
     not_idchar: string;
     not_idstart: string;
     id_ok: RegExp;
     next_id: RegExp;
-  } = rison as any;
+  };
 
   const l = [];
   for (let hi = 0; hi < 16; hi += 1) {
@@ -216,7 +217,7 @@ export const getUserOwnedObjects = (
   }).then(res => res.json?.result);
 
 export const getFilteredChartsandDashboards = (
-  addDangerToast: (arg1: string, arg2: any) => any,
+  addDangerToast: (arg1: string, arg2: unknown) => void,
   filters: Filter[],
   dashboardSelectColumns?: string[],
   chartSelectColumns?: string[],
@@ -248,11 +249,11 @@ export const getFilteredChartsandDashboards = (
 export const getRecentActivityObjs = (
   userId: string | number,
   recent: string,
-  addDangerToast: (arg1: string, arg2: any) => any,
+  addDangerToast: (arg1: string, arg2: unknown) => void,
   filters: Filter[],
 ) =>
   SupersetClient.get({ endpoint: recent }).then(recentsRes => {
-    const res: any = {};
+    const res: { other?: JsonObject[]; viewed?: JsonObject[] } = {};
     const distinctRes = lruCache<RecentActivity>(6);
     recentsRes.json.result.reverse().forEach((record: RecentActivity) => {
       distinctRes.set(record.item_url, record);
@@ -451,75 +452,83 @@ export const CardStyles = styled.div`
 `;
 
 export /* eslint-disable no-underscore-dangle */
-const isNeedsPassword = (payload: any) =>
+const isNeedsPassword = (payload: unknown) =>
   typeof payload === 'object' &&
+  payload !== null &&
+  '_schema' in payload &&
   Array.isArray(payload._schema) &&
-  !!payload._schema?.find(
+  payload._schema.some(
     (e: string) => e === 'Must provide a password for the database',
   );
 
 export /* eslint-disable no-underscore-dangle */
-const isNeedsSSHPassword = (payload: any) =>
+const isNeedsSSHPassword = (payload: unknown) =>
   typeof payload === 'object' &&
+  payload !== null &&
+  '_schema' in payload &&
   Array.isArray(payload._schema) &&
-  !!payload._schema?.find(
+  payload._schema.some(
     (e: string) => e === 'Must provide a password for the ssh tunnel',
   );
 
 export /* eslint-disable no-underscore-dangle */
-const isNeedsSSHPrivateKey = (payload: any) =>
+const isNeedsSSHPrivateKey = (payload: unknown) =>
   typeof payload === 'object' &&
+  payload !== null &&
+  '_schema' in payload &&
   Array.isArray(payload._schema) &&
-  !!payload._schema?.find(
+  payload._schema.some(
     (e: string) => e === 'Must provide a private key for the ssh tunnel',
   );
 
 export /* eslint-disable no-underscore-dangle */
-const isNeedsSSHPrivateKeyPassword = (payload: any) =>
+const isNeedsSSHPrivateKeyPassword = (payload: unknown) =>
   typeof payload === 'object' &&
+  payload !== null &&
+  '_schema' in payload &&
   Array.isArray(payload._schema) &&
-  !!payload._schema?.find(
+  payload._schema.some(
     (e: string) =>
       e === 'Must provide a private key password for the ssh tunnel',
   );
 
-export const isAlreadyExists = (payload: any) =>
+export const isAlreadyExists = (payload: unknown) =>
   typeof payload === 'string' &&
   payload.includes('already exists and `overwrite=true` was not passed');
 
 export const getPasswordsNeeded = (errors: Record<string, any>[]) =>
   errors.flatMap(error =>
-    Object.entries(error.extra)
+    Object.entries(error.extra as Record<string, unknown>)
       .filter(([, payload]) => isNeedsPassword(payload))
       .map(([fileName]) => fileName),
   );
 
 export const getSSHPasswordsNeeded = (errors: Record<string, any>[]) =>
   errors.flatMap(error =>
-    Object.entries(error.extra)
+    Object.entries(error.extra as Record<string, unknown>)
       .filter(([, payload]) => isNeedsSSHPassword(payload))
       .map(([fileName]) => fileName),
   );
 
 export const getSSHPrivateKeysNeeded = (errors: Record<string, any>[]) =>
   errors.flatMap(error =>
-    Object.entries(error.extra)
+    Object.entries(error.extra as Record<string, unknown>)
       .filter(([, payload]) => isNeedsSSHPrivateKey(payload))
       .map(([fileName]) => fileName),
   );
 
 export const getSSHPrivateKeyPasswordsNeeded = (
-  errors: Record<string, any>[],
+  errors: Record<string, unknown>[],
 ) =>
   errors.flatMap(error =>
-    Object.entries(error.extra)
+    Object.entries(error.extra as Record<string, unknown>)
       .filter(([, payload]) => isNeedsSSHPrivateKeyPassword(payload))
       .map(([fileName]) => fileName),
   );
 
 export const getAlreadyExists = (errors: Record<string, any>[]) =>
   errors.flatMap(error =>
-    Object.entries(error.extra)
+    Object.entries(error.extra as Record<string, unknown>)
       .filter(([, payload]) => isAlreadyExists(payload))
       .map(([fileName]) => fileName),
   );
@@ -531,20 +540,22 @@ const ENCRYPTED_EXTRA_FIELD_REGEX =
   /^Must provide value for masked_encrypted_extra field: (.+?)(?:\s+\((.+)\))?$/;
 
 export /* eslint-disable no-underscore-dangle */
-const isNeedsEncryptedExtraField = (payload: any) =>
+const isNeedsEncryptedExtraField = (payload: unknown) =>
   typeof payload === 'object' &&
+  payload !== null &&
+  '_schema' in payload &&
   Array.isArray(payload._schema) &&
-  payload._schema?.some((e: string) => ENCRYPTED_EXTRA_FIELD_REGEX.test(e));
+  payload._schema.some((e: string) => ENCRYPTED_EXTRA_FIELD_REGEX.test(e));
 
 export const getEncryptedExtraFieldsNeeded = (
-  errors: Record<string, any>[],
+  errors: Record<string, unknown>[],
 ): FileEncryptedExtraFields[] =>
   errors.flatMap(error =>
-    Object.entries(error.extra)
+    Object.entries(error.extra as Record<string, unknown>)
       .filter(([, payload]) => isNeedsEncryptedExtraField(payload))
       .map(([fileName, payload]) => ({
         fileName,
-        fields: (payload as any)._schema
+        fields: (payload as { _schema: string[] })._schema
           .filter((e: string) => ENCRYPTED_EXTRA_FIELD_REGEX.test(e))
           .map((e: string) => {
             const match = e.match(ENCRYPTED_EXTRA_FIELD_REGEX);
