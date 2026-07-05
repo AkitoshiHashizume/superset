@@ -21,7 +21,7 @@ import fetchMock from 'fetch-mock';
 // in order to mock modules in test case, so avoid absolute import module
 import { SupersetClient } from '../../packages/superset-ui-core/src/connection';
 
-export default function setupSupersetClient() {
+export default function setupSupersetClient(): void {
   // The following is needed to mock out SupersetClient requests
   // including CSRF authentication and initialization
   global.FormData = window.FormData; // used by SupersetClient
